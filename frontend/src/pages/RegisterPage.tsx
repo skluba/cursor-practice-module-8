@@ -3,6 +3,7 @@ import { type FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import * as api from '../lib/api'
+import { validateEmail, validateRegisterPassword } from '../lib/validation'
 
 import { useAuth } from '../context/AuthContext'
 
@@ -26,6 +27,8 @@ export function RegisterPage() {
   const [country, setCountry] = useState('')
 
   const [err, setErr] = useState('')
+  const [emailErr, setEmailErr] = useState('')
+  const [passwordErr, setPasswordErr] = useState('')
   const [busy, setBusy] = useState(false)
 
   if (token && step === 1 && !wizToken) {
@@ -42,9 +45,16 @@ export function RegisterPage() {
   async function step1Submit(e: FormEvent) {
     e.preventDefault()
     setErr('')
+    const ev = validateEmail(email)
+    const pv = validateRegisterPassword(password)
+    setEmailErr(ev)
+    setPasswordErr(pv)
+    if (ev || pv) return
+
+    const normalizedEmail = email.trim().toLowerCase()
     setBusy(true)
     try {
-      const tok = await api.authRegisterStart({ email: email.trim(), password })
+      const tok = await api.authRegisterStart({ email: normalizedEmail, password })
       setWizToken(tok.access_token)
       setStep(2)
     } catch (error) {
@@ -130,6 +140,7 @@ export function RegisterPage() {
 
       {step === 1 && (
         <form
+          noValidate
           onSubmit={(e) => void step1Submit(e)}
           className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
         >
@@ -138,24 +149,43 @@ export function RegisterPage() {
             Email
             <input
               autoComplete="email"
-              required
               type="email"
+              maxLength={320}
               value={email}
-              onChange={(ev) => setEmail(ev.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              onChange={(ev) => {
+                setEmail(ev.target.value)
+                setEmailErr('')
+              }}
+              aria-invalid={Boolean(emailErr)}
+              aria-describedby={emailErr ? 'register-email-feedback' : undefined}
+              className={`mt-1 w-full rounded-lg border px-3 py-2 ${emailErr ? 'border-rose-400' : 'border-slate-300'}`}
             />
           </label>
+          {emailErr ? (
+            <p id="register-email-feedback" role="alert" className="-mt-2 text-sm text-rose-700">
+              {emailErr}
+            </p>
+          ) : null}
           <label className="block text-sm font-medium text-slate-700">
             Password (≥ 8 chars)
             <input
-              required
               type="password"
-              minLength={8}
+              maxLength={256}
               value={password}
-              onChange={(ev) => setPassword(ev.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              onChange={(ev) => {
+                setPassword(ev.target.value)
+                setPasswordErr('')
+              }}
+              aria-invalid={Boolean(passwordErr)}
+              aria-describedby={passwordErr ? 'register-password-feedback' : undefined}
+              className={`mt-1 w-full rounded-lg border px-3 py-2 ${passwordErr ? 'border-rose-400' : 'border-slate-300'}`}
             />
           </label>
+          {passwordErr ? (
+            <p id="register-password-feedback" role="alert" className="-mt-2 text-sm text-rose-700">
+              {passwordErr}
+            </p>
+          ) : null}
           <button
             type="submit"
             disabled={busy}

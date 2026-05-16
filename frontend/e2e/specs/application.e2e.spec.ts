@@ -39,6 +39,17 @@ test.describe('Storefront application (mocked API)', () => {
     await expect(page.getByRole('heading', { name: 'Log in' })).toBeVisible()
   })
 
+  test('login rejects invalid email with client-side message (no `/me`)', async ({ page }) => {
+    await attachShopApiMocks(page)
+    await page.goto('/login')
+    await page.getByLabel('Email').fill('missing-at-sign')
+    await page.getByLabel('Password').fill('secret')
+    await page.getByRole('button', { name: /Continue/i }).click()
+
+    await expect(page.getByText(/Enter a valid email address/i)).toBeVisible()
+    await expect(page).toHaveURL(/\/login/)
+  })
+
   test('login failure surfaces server-provided toast', async ({ page }) => {
     await attachShopApiMocks(page)
     await page.goto('/login')
@@ -86,6 +97,28 @@ test.describe('Storefront application (mocked API)', () => {
     await page.getByRole('button', { name: /Place order/i }).click()
     await expect(page.getByText(/Order #999 placed/i)).toBeVisible()
     await expect(page.getByText('Continue shopping')).toBeVisible()
+  })
+
+  test('signup rejects invalid email before advancing steps', async ({ page }) => {
+    await attachShopApiMocks(page)
+    await page.goto('/register')
+    await page.getByLabel('Email').fill('not-valid')
+    await page.getByLabel(/Password \(≥/).fill('password12')
+    await page.getByRole('button', { name: /Continue to profile/i }).click()
+
+    await expect(page.getByText(/Enter a valid email address/i)).toBeVisible()
+    await expect(page.getByLabel(/^First name$/i)).not.toBeVisible()
+  })
+
+  test('signup blocks weak password before advancing steps', async ({ page }) => {
+    await attachShopApiMocks(page)
+    await page.goto('/register')
+    await page.getByLabel('Email').fill('wiz@test.dev')
+    await page.getByLabel(/Password \(≥/).fill('short')
+    await page.getByRole('button', { name: /Continue to profile/i }).click()
+
+    await expect(page.getByText(/Use at least 8 characters/i)).toBeVisible()
+    await expect(page.getByLabel(/^First name$/i)).not.toBeVisible()
   })
 
   test('multi-step signup advances through wizard scaffolding', async ({ page }) => {

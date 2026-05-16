@@ -37,7 +37,7 @@ describe('LoginPage', () => {
       </MemoryRouter>,
     )
 
-    await user.type(screen.getByLabelText('Email'), '  alice@test.dev  ')
+    await user.type(screen.getByLabelText('Email'), '  Alice@TEST.DEV  ')
     await user.type(screen.getByLabelText('Password'), 'hunter42')
     await user.click(screen.getByRole('button', { name: /Continue/i }))
 
@@ -48,6 +48,59 @@ describe('LoginPage', () => {
       expect(screen.getByRole('heading', { name: 'Catalog-Destination' })).toBeVisible()
     })
     expect(screen.queryByRole('heading', { name: 'Log in' })).not.toBeInTheDocument()
+  })
+
+  it('client-side rejection for malformed email never calls login', async () => {
+    const user = userEvent.setup()
+    const loginSpy = vi.spyOn(api, 'authLogin')
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <AuthProvider>
+          <CartProvider>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/catalog" element={<h1>Catalog</h1>} />
+            </Routes>
+          </CartProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    await user.type(screen.getByLabelText('Email'), 'not-an-email')
+    await user.type(screen.getByLabelText('Password'), 'x')
+    await user.click(screen.getByRole('button', { name: /Continue/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Enter a valid email address/i)).toBeInTheDocument()
+    })
+    expect(loginSpy).not.toHaveBeenCalled()
+  })
+
+  it('client-side rejection for whitespace-only password never calls login', async () => {
+    const user = userEvent.setup()
+    const loginSpy = vi.spyOn(api, 'authLogin')
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <AuthProvider>
+          <CartProvider>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+            </Routes>
+          </CartProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    await user.type(screen.getByLabelText('Email'), 'fine@example.com')
+    await user.type(screen.getByLabelText('Password'), '    ')
+    await user.click(screen.getByRole('button', { name: /Continue/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Enter your password/i)).toBeInTheDocument()
+    })
+    expect(loginSpy).not.toHaveBeenCalled()
   })
 
   /** Negative UX: invalid credentials reuse API message */

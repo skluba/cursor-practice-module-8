@@ -35,6 +35,58 @@ describe('RegisterPage', () => {
     expect(screen.queryByLabelText(/First name/i)).not.toBeInTheDocument()
   })
 
+  it('step 1 client validation blocks short passwords before register API', async () => {
+    const user = userEvent.setup()
+    const startSpy = vi.spyOn(api, 'authRegisterStart')
+
+    render(
+      <MemoryRouter initialEntries={['/register']}>
+        <AuthProvider>
+          <CartProvider>
+            <Routes>
+              <Route path="/register" element={<RegisterPage />} />
+            </Routes>
+          </CartProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    await user.type(screen.getByLabelText('Email'), 'new@example.com')
+    await user.type(screen.getByLabelText(/Password \(≥/), 'short')
+    await user.click(screen.getByRole('button', { name: /Continue to profile/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Use at least 8 characters/i)).toBeInTheDocument()
+    })
+    expect(startSpy).not.toHaveBeenCalled()
+  })
+
+  it('step 1 client validation rejects malformed email before register API', async () => {
+    const user = userEvent.setup()
+    const startSpy = vi.spyOn(api, 'authRegisterStart')
+
+    render(
+      <MemoryRouter initialEntries={['/register']}>
+        <AuthProvider>
+          <CartProvider>
+            <Routes>
+              <Route path="/register" element={<RegisterPage />} />
+            </Routes>
+          </CartProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    await user.type(screen.getByLabelText('Email'), 'oops-no-at')
+    await user.type(screen.getByLabelText(/Password \(≥/), 'abcdefgh')
+    await user.click(screen.getByRole('button', { name: /Continue to profile/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Enter a valid email address/i)).toBeInTheDocument()
+    })
+    expect(startSpy).not.toHaveBeenCalled()
+  })
+
   /** Positive multi-step handshake up to wizard completion */
   it('runs through wizard and exchanges completion token via loginWithToken', async () => {
     const user = userEvent.setup()
