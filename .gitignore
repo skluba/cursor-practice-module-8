@@ -1,0 +1,29 @@
+# Dependencies & builds
+**/node_modules/
+**/dist/
+**/.vite/
+**/*.egg-info/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Env & local
+.env
+*.local
+
+# Playwright (monorepo / tooling)
+**/playwright-report/
+**/test-results/
+**/blob-report/
+**/playwright/.cache/
+
+# Cursor
+.cursor/
