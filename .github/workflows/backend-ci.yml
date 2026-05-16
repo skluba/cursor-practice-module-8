@@ -1,5 +1,4 @@
-# Backend: lint, typecheck (optional), tests
-# Tune steps once pyproject/requirements are finalized.
+# Backend: lint, dependency audit, tests
 name: Backend CI
 
 on:
@@ -13,6 +12,13 @@ on:
       - "backend/**"
       - ".github/workflows/backend-ci.yml"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
     working-directory: backend
@@ -20,6 +26,7 @@ defaults:
 jobs:
   qa:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16-alpine
@@ -58,6 +65,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Dependency audit (pip-audit)
+        run: pip-audit -r requirements.txt -r requirements-dev.txt
+
       - name: Lint (ruff)
         run: ruff check .
 
@@ -74,4 +84,13 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://app:app@localhost:5432/app_test
           REDIS_URL: redis://localhost:6379/0
-        run: pytest
+        run: mkdir -p test-results && pytest --junitxml=test-results/pytest-junit.xml -o junit_family=xunit2
+
+      - name: Upload failure artifacts (pytest)
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: backend-pytest-junit-${{ github.run_number }}
+          path: backend/test-results/
+          retention-days: 14
+          if-no-files-found: warn

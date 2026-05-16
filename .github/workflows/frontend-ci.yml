@@ -1,4 +1,4 @@
-# Frontend: install, lint, unit tests
+# Frontend: install, audit, lint, tests, Playwright
 name: Frontend CI
 
 on:
@@ -12,6 +12,13 @@ on:
       - "frontend/**"
       - ".github/workflows/frontend-ci.yml"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
     working-directory: frontend
@@ -19,6 +26,7 @@ defaults:
 jobs:
   qa:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v6
 
@@ -31,11 +39,16 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Dependency audit (npm)
+        run: npm audit --audit-level=high
+
       - name: Lint
         run: npm run lint
 
       - name: Unit tests
-        run: npm run test -- --run
+        run: |
+          mkdir -p test-results
+          npm run test -- --run --reporter=github-actions --reporter=junit --outputFile.junit=test-results/vitest-junit.xml
 
       - name: Build (preview bundle for Playwright)
         run: npm run build
@@ -45,3 +58,14 @@ jobs:
 
       - name: End-to-end tests
         run: npm run test:e2e
+
+      - name: Upload failure artifacts (Playwright / Vitest)
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-ci-failure-${{ github.run_number }}
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 14
+          if-no-files-found: ignore
