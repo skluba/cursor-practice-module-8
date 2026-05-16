@@ -1,0 +1,104 @@
+"""Authenticated shopping cart."""
+
+from __future__ import annotations
+
+from flask.views import MethodView
+from flask_jwt_extended import get_jwt_identity, jwt_required
+from sqlalchemy.orm import joinedload
+from werkzeug.exceptions import NotFound, Unauthorized
+
+from flask_smorest import Blueprint
+
+from app.extensions import db
+from app.models.cart_line import CartLine
+from app.models.product import Product
+from app.schemas.api import AddCartLineSchema, CartExposeSchema
+
+bp = Blueprint("cart", __name__, url_prefix="/api/v1/cart", description="Shopping cart")
+
+
+def _user_id() -> int:
+    raw = get_jwt_identity()
+    if raw is None:
+        raise Unauthorized(description="Unauthorized.")
+    return int(str(raw))
+
+
+def _cart_payload(user_id: int) -> dict:
+    rows = CartLine.query.filter_by(user_id=user_id).options(joinedload(CartLine.product)).all()
+
+    exposed = []
+    total_cents = 0
+    for row in rows:
+        p = row.product
+        if p is None:
+            continue
+        line_total = row.quantity * p.price_cents
+        total_cents += line_total
+        exposed.append(
+            {
+                "id": row.id,
+                "quantity": row.quantity,
+                "product": {
+                    "id": p.id,
+                    "sku": p.sku,
+                    "title": p.title,
+                    "price_cents": p.price_cents,
+                },
+            },
+        )
+    qty_total = sum(r.quantity for r in rows)
+
+    return {
+        "lines": exposed,
+        "line_count": len(exposed),
+        "quantity_total": qty_total,
+        "estimated_total_cents": total_cents,
+    }
+
+
+@bp.route("")
+class CartView(MethodView):
+    @jwt_required()
+    @bp.response(200, CartExposeSchema)
+    def get(self) -> dict:
+        return _cart_payload(_user_id())
+
+
+@bp.route("/items")
+class CartItems(MethodView):
+    """Add merged line (same product aggregates quantity)."""
+
+    @jwt_required()
+    @bp.arguments(AddCartLineSchema)
+    @bp.response(200, CartExposeSchema)
+    def post(self, payload: dict) -> dict:
+        uid = _user_id()
+        pid = payload["product_id"]
+        qty_add = payload["quantity"]
+
+        product = Product.query.filter_by(id=pid, active=True).first()
+        if product is None:
+            raise NotFound(description="Product not available.")
+
+        line = CartLine.query.filter_by(user_id=uid, product_id=pid).first()
+        if line is None:
+            db.session.add(CartLine(user_id=uid, product_id=pid, quantity=qty_add))
+        else:
+            line.quantity += qty_add
+
+        db.session.commit()
+        return _cart_payload(uid)
+
+
+@bp.route("/items/<int:line_id>")
+class CartOneItem(MethodView):
+    @jwt_required()
+    @bp.response(204)
+    def delete(self, line_id: int) -> None:
+        uid = _user_id()
+        line = CartLine.query.filter_by(id=line_id, user_id=uid).first()
+        if line is None:
+            raise NotFound(description="Cart line not found.")
+        db.session.delete(line)
+        db.session.commit()

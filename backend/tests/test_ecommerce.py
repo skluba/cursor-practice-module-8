@@ -1,0 +1,151 @@
+"""E-commerce flows: registration, auth, catalogue, cart, checkout."""
+
+from __future__ import annotations
+
+from app.extensions import db
+from app.models.product import Product
+
+from tests.conftest import auth_hdr, register_fully_logged_in
+
+
+def test_login_blocked_until_registration_complete(client):
+    r = client.post(
+        "/api/v1/auth/register/start",
+        json={"email": "partial@example.com", "password": "password12"},
+    )
+    assert r.status_code == 201
+
+    r = client.post(
+        "/api/v1/auth/login",
+        json={"email": "partial@example.com", "password": "password12"},
+    )
+    assert r.status_code == 403
+
+
+def test_register_duplicate_email(client):
+    body = {"email": "dup@example.com", "password": "longenough1"}
+    assert client.post("/api/v1/auth/register/start", json=body).status_code == 201
+    r = client.post(
+        "/api/v1/auth/register/start",
+        json={"email": "dup@example.com", "password": "longenough2"},
+    )
+    assert r.status_code == 409
+
+
+def test_registration_steps_and_login(client):
+    email = "ready@example.com"
+    pwd = "secure_pw1"
+    tok = register_fully_logged_in(client, email, pwd)
+
+    me = client.get("/api/v1/auth/me", headers=auth_hdr(tok))
+    assert me.status_code == 200
+    assert me.get_json()["registration_complete"] is True
+
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
+    assert login.status_code == 200
+
+
+def test_login_invalid_password_after_complete(client):
+    email = "u@example.com"
+    pwd_ok = "right_pass1!"
+    register_fully_logged_in(client, email, pwd_ok)
+
+    bad = client.post("/api/v1/auth/login", json={"email": email, "password": "wrong-pass"})
+    assert bad.status_code == 401
+
+
+def test_logout_revokes_access_token(client):
+    email = "out@example.com"
+    pwd = "pw_for_out1"
+    token = register_fully_logged_in(client, email, pwd)
+    hdr = auth_hdr(token)
+
+    assert client.get("/api/v1/catalog/items").status_code == 200
+
+    out = client.post("/api/v1/auth/logout", headers=hdr)
+    assert out.status_code == 204
+
+    blocked = client.get("/api/v1/auth/me", headers=hdr)
+    assert blocked.status_code == 401
+
+
+def test_catalog_lists_only_active(client, sample_products):
+    page = client.get("/api/v1/catalog/items?page=1&page_size=10").get_json()
+    assert page["meta"]["total"] == 2
+    skus = {row["sku"] for row in page["items"]}
+    assert skus == {"TOOL-HAMMER", "FAST-NAILS"}
+
+
+def test_catalog_detail_hides_inactive(client, sample_products):
+    iid = sample_products["inactive_id"]
+    assert client.get(f"/api/v1/catalog/items/{iid}").status_code == 404
+
+    hid = sample_products["hammer_id"]
+    d = client.get(f"/api/v1/catalog/items/{hid}").get_json()
+    assert d["title"] == "Claw Hammer"
+
+
+def test_cart_merge_delete_checkout_updates_stock(app, client, sample_products):
+    email = "shop@example.com"
+    pwd = "shop_pass1!"
+    jwt = register_fully_logged_in(client, email, pwd)
+    hdr = auth_hdr(jwt)
+
+    hid = sample_products["hammer_id"]
+    nid = sample_products["nails_id"]
+
+    c1 = client.post("/api/v1/cart/items", json={"product_id": hid, "quantity": 2}, headers=hdr)
+    assert c1.status_code == 200
+
+    client.post("/api/v1/cart/items", json={"product_id": hid, "quantity": 1}, headers=hdr)
+    merged = client.get("/api/v1/cart", headers=hdr).get_json()
+    assert merged["quantity_total"] == 3
+
+    cart_with_nails = client.post(
+        "/api/v1/cart/items",
+        json={"product_id": nid, "quantity": 4},
+        headers=hdr,
+    ).get_json()
+    nails_line_id = next(ln["id"] for ln in cart_with_nails["lines"] if ln["product"]["id"] == nid)
+
+    rm = client.delete(f"/api/v1/cart/items/{nails_line_id}", headers=hdr)
+    assert rm.status_code == 204
+    cart = client.get("/api/v1/cart", headers=hdr).get_json()
+    assert len(cart["lines"]) == 1
+
+    chk = client.post("/api/v1/orders/checkout", headers=hdr)
+    assert chk.status_code == 201
+    order = chk.get_json()
+    assert order["total_cents"] == 3 * 1299
+    computed = sum(ln["quantity"] * ln["unit_price_cents"] for ln in order["lines"])
+    assert computed == order["total_cents"]
+
+    empty = client.get("/api/v1/cart", headers=hdr).get_json()
+    assert empty["line_count"] == 0
+
+    with app.app_context():
+        fresh = db.session.get(Product, hid)
+        assert fresh.stock_qty == 2
+
+
+def test_checkout_conflict_insufficient_stock(client, sample_products):
+    email = "over@example.com"
+    pwd = "over_pw1!"
+    jwt = register_fully_logged_in(client, email, pwd)
+    hdr = auth_hdr(jwt)
+    hid = sample_products["hammer_id"]
+
+    r = client.post("/api/v1/cart/items", json={"product_id": hid, "quantity": 10}, headers=hdr)
+    assert r.status_code == 200
+
+    chk = client.post("/api/v1/orders/checkout", headers=hdr)
+    assert chk.status_code == 409
+
+
+def test_checkout_requires_non_empty_cart(client):
+    email = "empty@example.com"
+    pwd = "empty_pw1!"
+    jwt = register_fully_logged_in(client, email, pwd)
+
+    chk = client.post("/api/v1/orders/checkout", headers=auth_hdr(jwt))
+    assert chk.status_code == 400
