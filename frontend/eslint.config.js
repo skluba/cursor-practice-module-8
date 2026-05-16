@@ -33,6 +33,12 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.vitest },
+    },
+  },
+  {
     files: ['e2e/**/*.ts'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
     languageOptions: {
