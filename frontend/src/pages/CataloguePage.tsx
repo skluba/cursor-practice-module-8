@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { CatalogueGridSkeleton } from '../components/CatalogueGridSkeleton'
 import * as api from '../lib/api'
 import type { CatalogSort } from '../lib/catalogQuery'
 import { buildCatalogListParams, parseMoneyUsdForCatalogFilter } from '../lib/catalogQuery'
@@ -169,7 +170,17 @@ export function CataloguePage() {
       ) : null}
 
       {loading ? (
-        <p className="text-sm text-slate-500">Loading products…</p>
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          aria-label="Loading catalogue products."
+          className="space-y-4"
+        >
+          <span className="sr-only">Loading catalogue products.</span>
+          <CatalogueGridSkeleton />
+          <p className="text-center text-xs text-slate-500">Synchronizing inventory…</p>
+        </div>
       ) : error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           {error}
@@ -212,11 +223,11 @@ export function CataloguePage() {
           ) : null}
         </>
       )}
-      {!loading && !error && (
-        <div className="flex items-center justify-center gap-4">
+      {!error && (
+        <div className={`flex items-center justify-center gap-4 ${loading ? 'opacity-60' : ''}`}>
           <button
             type="button"
-            disabled={!canPrev}
+            disabled={loading || !canPrev}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm disabled:opacity-40"
           >
@@ -225,7 +236,7 @@ export function CataloguePage() {
           <span className="text-sm tabular-nums text-slate-600">Page {page}</span>
           <button
             type="button"
-            disabled={!canNext}
+            disabled={loading || !canNext}
             onClick={() => setPage((p) => p + 1)}
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm disabled:opacity-40"
           >

@@ -58,6 +58,22 @@ npm run dev
 
 Then open **`http://127.0.0.1:5173`**. Requests go to `VITE_API_BASE_URL`; keep the backend terminal running at the same time.
 
+### Lighthouse — use a production preview
+
+Development (`npm run dev`) carries **development** builds of React, injects **`@vite/client`** (HMR/WebSocket), and is **not minified**. Reports of large “unused JS”, missing minification, and **blocked back/forward cache** are largely **diagnostics of dev mode**, not your shipped assets. Extensions (password managers/autofill overlays) also inflate attribution.
+
+Audit the optimized bundle instead:
+
+```bash
+cd frontend
+npm run build
+npm run preview -- --host 127.0.0.1 --port 4173
+```
+
+Point Lighthouse at **`http://127.0.0.1:4173`**.
+
+The SPA injects **`dns-prefetch` / `preconnect`** toward `VITE_API_BASE_URL` (see **`vite.config.ts`**) so the catalogue API handshake can overlap earlier with script work. **`App.tsx`** lazy-loads route chunks (login, checkout, secondary screens) alongside accessible loading fallbacks (**`PageLoadingFallback`**, catalogue grid skeleton).
+
 ## Typical workflow summary
 
 | Step | Terminal / action |

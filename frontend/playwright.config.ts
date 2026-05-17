@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig } from '@playwright/test'
 
 const host = process.env.PLAYWRIGHT_HOST ?? '127.0.0.1'
 const previewPort = 4173
@@ -41,7 +41,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  /** Prefer explicit viewport via `test.use` in specs so responsive layouts stay deterministic. */
+  projects: [{ name: 'chromium', use: { viewport: { width: 1280, height: 720 } } }],
 
   webServer,
 })

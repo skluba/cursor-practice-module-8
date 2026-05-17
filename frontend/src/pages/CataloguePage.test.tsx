@@ -41,7 +41,7 @@ describe('CataloguePage', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Loading products…')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /Loading catalogue products/i })).toBeInTheDocument()
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Alpha' })).toBeVisible()
