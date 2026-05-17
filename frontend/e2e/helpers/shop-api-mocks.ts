@@ -75,9 +75,16 @@ const AERO_OVERRIDE = {
   description: 'Coffee lovers upgrade',
 } as const
 
-const MOCK_CATALOG_INDEXED = MOCK_CATALOG.map((row) =>
-  row.id === 5 ? ZEN_OVERRIDE : row.id === 6 ? LOW_OVERRIDE : row.id === 7 ? AERO_OVERRIDE : row,
-)
+type MockSeedRow = (typeof MOCK_CATALOG)[number]
+
+function applyNamedCatalogOverrides(row: MockSeedRow) {
+  if (row.id === 5) return ZEN_OVERRIDE
+  if (row.id === 6) return LOW_OVERRIDE
+  if (row.id === 7) return AERO_OVERRIDE
+  return row
+}
+
+const MOCK_CATALOG_INDEXED = MOCK_CATALOG.map(applyNamedCatalogOverrides)
 
 function productById(pid: number) {
   return MOCK_CATALOG_INDEXED.find((p) => p.id === pid) ?? null
@@ -85,74 +92,122 @@ function productById(pid: number) {
 
 const ALLOWED_SORT = new Set(['id', 'title_asc', 'title_desc', 'price_asc', 'price_desc'])
 
-function normalizeCatalogRows(
-  url: URL,
-): { body: Record<string, unknown>; status?: number } {
-  const sort = url.searchParams.get('sort') ?? 'id'
+type CatalogIndexedRow = (typeof MOCK_CATALOG_INDEXED)[number]
+
+type JsonErrorEnvelope = { status: number; body: Record<string, unknown> }
+
+function cloneCatalogIndexed(): CatalogIndexedRow[] {
+  return MOCK_CATALOG_INDEXED.map((r) => ({ ...r }))
+}
+
+function readSort(params: URLSearchParams): JsonErrorEnvelope | { sort: string } {
+  const sort = params.get('sort') ?? 'id'
   if (!ALLOWED_SORT.has(sort)) {
-    return { status: 422, body: { message: 'Invalid sort.', errors: { sort: ['Invalid choice.'] } } }
+    return {
+      status: 422,
+      body: { message: 'Invalid sort.', errors: { sort: ['Invalid choice.'] } },
+    }
   }
+  return { sort }
+}
 
-  let rows = MOCK_CATALOG_INDEXED.map((r) => ({ ...r }))
-  const q = (url.searchParams.get('q') ?? '').trim().toLowerCase()
-  if (q.length) {
-    rows = rows.filter(
-      (r) =>
-        r.title.toLowerCase().includes(q) ||
-        r.sku.toLowerCase().includes(q) ||
-        (r.description ?? '').toLowerCase().includes(q),
-    )
-  }
-
-  const minPc = url.searchParams.get('min_price_cents')
-  const maxPc = url.searchParams.get('max_price_cents')
-  let loNum: number | null = null
-  let hiNum: number | null = null
+function readPriceBand(params: URLSearchParams): JsonErrorEnvelope | { lo: number | null; hi: number | null } {
+  const minPc = params.get('min_price_cents')
+  const maxPc = params.get('max_price_cents')
+  let lo: number | null = null
+  let hi: number | null = null
   if (minPc !== null && minPc !== '') {
-    loNum = Number(minPc)
-    if (Number.isNaN(loNum)) {
+    const n = Number(minPc)
+    if (Number.isNaN(n)) {
       return { status: 422, body: { message: 'Bad min_price_cents.' } }
     }
+    lo = n
   }
   if (maxPc !== null && maxPc !== '') {
-    hiNum = Number(maxPc)
-    if (Number.isNaN(hiNum)) {
+    const n = Number(maxPc)
+    if (Number.isNaN(n)) {
       return { status: 422, body: { message: 'Bad max_price_cents.' } }
     }
+    hi = n
   }
-  if (loNum !== null && hiNum !== null && loNum > hiNum) {
+  if (lo !== null && hi !== null && lo > hi) {
     return {
       status: 422,
       body: { message: 'min_price_cents cannot exceed max_price_cents.' },
     }
   }
-  if (loNum !== null) {
-    rows = rows.filter((r) => r.price_cents >= loNum)
-  }
-  if (hiNum !== null) {
-    rows = rows.filter((r) => r.price_cents <= hiNum)
-  }
+  return { lo, hi }
+}
 
-  rows.sort((a, b) => {
-    switch (sort) {
-      case 'title_asc':
-        return a.title.localeCompare(b.title, 'en') || a.id - b.id
-      case 'title_desc':
-        return b.title.localeCompare(a.title, 'en') || b.id - a.id
-      case 'price_asc':
-        return a.price_cents - b.price_cents || a.id - b.id
-      case 'price_desc':
-        return b.price_cents - a.price_cents || b.id - a.id
-      default:
-        return a.id - b.id
-    }
-  })
+function filterCatalogByKeyword(rows: CatalogIndexedRow[], qRaw: string): CatalogIndexedRow[] {
+  const q = qRaw.trim().toLowerCase()
+  if (!q.length) return rows
+  return rows.filter(
+    (r) =>
+      r.title.toLowerCase().includes(q) ||
+      r.sku.toLowerCase().includes(q) ||
+      (r.description ?? '').toLowerCase().includes(q),
+  )
+}
 
-  const pageNumRaw = Number(url.searchParams.get('page') ?? '1')
+function filterCatalogByPriceRange(
+  rows: CatalogIndexedRow[],
+  lo: number | null,
+  hi: number | null,
+): CatalogIndexedRow[] {
+  let out = rows
+  if (lo !== null) out = out.filter((r) => r.price_cents >= lo)
+  if (hi !== null) out = out.filter((r) => r.price_cents <= hi)
+  return out
+}
+
+function compareCatalogSorted(a: CatalogIndexedRow, b: CatalogIndexedRow, sort: string): number {
+  switch (sort) {
+    case 'title_asc':
+      return a.title.localeCompare(b.title, 'en') || a.id - b.id
+    case 'title_desc':
+      return b.title.localeCompare(a.title, 'en') || b.id - a.id
+    case 'price_asc':
+      return a.price_cents - b.price_cents || a.id - b.id
+    case 'price_desc':
+      return b.price_cents - a.price_cents || b.id - a.id
+    default:
+      return a.id - b.id
+  }
+}
+
+function stableSortCatalog(rows: CatalogIndexedRow[], sort: string): void {
+  rows.sort((a, b) => compareCatalogSorted(a, b, sort))
+}
+
+function readPagination(params: URLSearchParams): { pageNum: number; pageSize: number } {
+  const pageNumRaw = Number(params.get('page') ?? '1')
   const pageNum = Number.isFinite(pageNumRaw) && pageNumRaw >= 1 ? pageNumRaw : 1
-  const psRaw = Number(url.searchParams.get('page_size') ?? '20')
+  const psRaw = Number(params.get('page_size') ?? '20')
   const pageSize =
     Number.isFinite(psRaw) && psRaw >= 1 ? Math.min(100, Math.floor(psRaw)) : 20
+  return { pageNum, pageSize }
+}
+
+function isJsonError(value: JsonErrorEnvelope | object): value is JsonErrorEnvelope {
+  return 'status' in value && typeof (value as JsonErrorEnvelope).status === 'number'
+}
+
+function normalizeCatalogRows(
+  url: URL,
+): { body: Record<string, unknown>; status?: number } {
+  const sortResult = readSort(url.searchParams)
+  if (isJsonError(sortResult)) return sortResult
+
+  const bandResult = readPriceBand(url.searchParams)
+  if (isJsonError(bandResult)) return bandResult
+
+  let rows = cloneCatalogIndexed()
+  rows = filterCatalogByKeyword(rows, url.searchParams.get('q') ?? '')
+  rows = filterCatalogByPriceRange(rows, bandResult.lo, bandResult.hi)
+  stableSortCatalog(rows, sortResult.sort)
+
+  const { pageNum, pageSize } = readPagination(url.searchParams)
   const total = rows.length
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const slice = rows.slice((pageNum - 1) * pageSize, pageNum * pageSize)

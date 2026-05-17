@@ -10,7 +10,10 @@ from flask_smorest import Blueprint
 from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import BadRequest, Conflict, Forbidden, Unauthorized
 
-from app.constants import UNAUTHORIZED_UNKNOWN_USER_DESCRIPTION
+from app.constants import (
+    BAD_REQUEST_REGISTRATION_FINALIZED_DESCRIPTION,
+    UNAUTHORIZED_UNKNOWN_USER_DESCRIPTION,
+)
 from app.extensions import db
 from app.models.user import User
 from app.passwords import hash_password, verify_password
@@ -85,7 +88,7 @@ class RegisterProfile(MethodView):
         if user is None:
             raise Unauthorized(description=UNAUTHORIZED_UNKNOWN_USER_DESCRIPTION)
         if user.registration_complete:
-            raise BadRequest(description="Registration is already finalized.")
+            raise BadRequest(description=BAD_REQUEST_REGISTRATION_FINALIZED_DESCRIPTION)
 
         user.first_name = payload["first_name"]
         user.last_name = payload["last_name"]
@@ -106,7 +109,7 @@ class RegisterShipping(MethodView):
         if user is None:
             raise Unauthorized(description=UNAUTHORIZED_UNKNOWN_USER_DESCRIPTION)
         if user.registration_complete:
-            raise BadRequest(description="Registration is already finalized.")
+            raise BadRequest(description=BAD_REQUEST_REGISTRATION_FINALIZED_DESCRIPTION)
         if not user.first_name or not user.last_name:
             raise BadRequest(description="Complete profile (/register/profile) before shipping.")
 
@@ -131,7 +134,7 @@ class RegisterComplete(MethodView):
         if user is None:
             raise Unauthorized(description=UNAUTHORIZED_UNKNOWN_USER_DESCRIPTION)
         if user.registration_complete:
-            raise BadRequest(description="Registration is already finalized.")
+            raise BadRequest(description=BAD_REQUEST_REGISTRATION_FINALIZED_DESCRIPTION)
         if not user.first_name or not user.last_name or not user.phone:
             raise BadRequest(description="Profile incomplete.")
         if not user.shipping_address:
