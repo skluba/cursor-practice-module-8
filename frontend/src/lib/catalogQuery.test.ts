@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCatalogListParams,
   parseMoneyUsdForCatalogFilter,
-  type CatalogSort,
 } from './catalogQuery'
 
 describe('buildCatalogListParams', () => {
@@ -23,7 +22,7 @@ describe('buildCatalogListParams', () => {
     const p = buildCatalogListParams({
       page: 1,
       pageSize: 12,
-      sort: 'title_desc' as CatalogSort,
+      sort: 'title_desc',
       q: '  mugs  ',
     })
     expect(p.get('sort')).toBe('title_desc')

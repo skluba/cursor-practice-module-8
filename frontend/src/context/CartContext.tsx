@@ -21,7 +21,7 @@ interface CartCtx {
 
 const CartContext = createContext<CartCtx | null>(null)
 
-export function CartProvider({ children }: { children: ReactNode }) {
+export function CartProvider({ children }: Readonly<{ children: ReactNode }>) {
   const { token } = useAuth()
   const [cart, setCart] = useState<CartResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -42,7 +42,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [token])
 
   useEffect(() => {
-    void refresh()
+    refresh().catch(() => undefined)
   }, [refresh])
 
   const value = useMemo(() => ({ cart, loading, refresh }), [cart, loading, refresh])

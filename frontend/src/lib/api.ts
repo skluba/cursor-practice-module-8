@@ -34,7 +34,7 @@ async function parseErrorMessage(response: Response): Promise<string> {
         return body.message
       }
       if (Array.isArray(body.errors)) {
-        return body.errors.map((e: unknown) => String(e)).join(', ')
+        return (body.errors as unknown[]).map(String).join(', ')
       }
       if (body.errors && typeof body.errors === 'object') {
         return JSON.stringify(body.errors)

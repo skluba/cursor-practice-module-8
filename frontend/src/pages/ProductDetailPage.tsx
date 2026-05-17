@@ -76,12 +76,17 @@ export function ProductDetailPage() {
         <p className="mt-2 text-xl font-semibold text-indigo-700">{formatUsd(product.price_cents)}</p>
         <p className="mt-4 text-sm text-slate-600">{product.description ?? 'No description.'}</p>
       </header>
-      <form onSubmit={(e) => void add(e)} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <form
+        onSubmit={(e) => {
+          add(e).catch(() => undefined)
+        }}
+        className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+      >
         {err ? (
           <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div>
         ) : null}
         <label className="block text-sm font-medium text-slate-700">
-          Quantity
+          Quantity{' '}
           <input
             type="number"
             min={1}

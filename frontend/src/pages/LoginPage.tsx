@@ -6,10 +6,13 @@ import { validateEmail, validateLoginPassword } from '../lib/validation'
 
 import { useAuth } from '../context/AuthContext'
 
+type LoginLocationState = { from?: string }
+
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const from = ((location.state as { from?: string } | undefined)?.from as string | undefined) ?? '/catalog'
+  const redirectedFrom = location.state as LoginLocationState | null | undefined
+  const from = redirectedFrom?.from ?? '/catalog'
 
   const { loginWithToken, token, loading } = useAuth()
   const [email, setEmail] = useState('')
@@ -57,7 +60,9 @@ export function LoginPage() {
       <form
         noValidate
         className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-        onSubmit={(e) => void submit(e)}
+        onSubmit={(e) => {
+          submit(e).catch(() => undefined)
+        }}
       >
         {err ? (
           <div role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -65,7 +70,7 @@ export function LoginPage() {
           </div>
         ) : null}
         <label className="block text-sm font-medium text-slate-700">
-          Email
+          Email{' '}
           <input
             autoComplete="email"
             type="email"
@@ -86,7 +91,7 @@ export function LoginPage() {
           </p>
         ) : null}
         <label className="block text-sm font-medium text-slate-700">
-          Password
+          Password{' '}
           <input
             autoComplete="current-password"
             type="password"

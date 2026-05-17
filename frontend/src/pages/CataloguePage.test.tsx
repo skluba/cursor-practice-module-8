@@ -11,7 +11,7 @@ function stub(id: number, title: string, price_cents: number) {
     id,
     sku: `SKU-${id}`,
     title,
-    description: null as null,
+    description: null,
     price_cents,
     active: true,
   }

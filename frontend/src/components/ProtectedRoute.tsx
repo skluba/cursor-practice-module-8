@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../context/AuthContext'
 
-export function ProtectedRoute({ redirectPath = '/login' }: { redirectPath?: string }) {
+export function ProtectedRoute({ redirectPath = '/login' }: Readonly<{ redirectPath?: string }>) {
   const { token, loading } = useAuth()
   const location = useLocation()
 
@@ -14,9 +14,9 @@ export function ProtectedRoute({ redirectPath = '/login' }: { redirectPath?: str
     )
   }
 
-  if (!token) {
-    return <Navigate to={redirectPath} replace state={{ from: location.pathname }} />
+  if (token) {
+    return <Outlet />
   }
 
-  return <Outlet />
+  return <Navigate to={redirectPath} replace state={{ from: location.pathname }} />
 }
