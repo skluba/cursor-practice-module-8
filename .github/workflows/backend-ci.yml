@@ -5,12 +5,14 @@ on:
   pull_request:
     paths:
       - "backend/**"
+      - "sonar-project.properties"
       - ".github/workflows/backend-ci.yml"
     types: [opened, synchronize, reopened]
   push:
     branches: [main]
     paths:
       - "backend/**"
+      - "sonar-project.properties"
       - ".github/workflows/backend-ci.yml"
 
 permissions:
@@ -102,5 +104,13 @@ jobs:
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6.0.0
+        with:
+          # Always resolve properties from repo root (job default cwd is backend/)
+          projectBaseDir: ${{ github.workspace }}
+          # SonarCloud requires organization + projectKey. Pass org here so you can store it as a repo variable instead of committing it.
+          args: >-
+            ${{ vars.SONARCLOUD_ORGANIZATION != '' && format('-Dsonar.organization={0}', vars.SONARCLOUD_ORGANIZATION) || '' }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          # Self-hosted SonarQube Server (leave unset when using SonarCloud)
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}

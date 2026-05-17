@@ -138,3 +138,15 @@ The SPA injects **`dns-prefetch` / `preconnect`** toward `VITE_API_BASE_URL` (se
 - **`401` after login / logout oddities** — Redis must be running (JWT blacklist). Use `docker compose` or a local Redis reachable at the URL in **`REDIS_URL`** (Compose default **`localhost:6381`**).
 - **Browser blocks API calls** — Match **`CORS_ORIGINS`** on the backend to how you opened the SPA (exact origin, including `localhost` vs `127.0.0.1`).
 - **Docker “port already allocated” / local collisions** — Edit the host (left) side in **`docker-compose.yml`** (`5434`, **`6381`**, **`9000`** for SonarQube, etc.) so it’s free on your machine, then set **`DATABASE_URL`** and **`REDIS_URL`** in **`backend/.env`** to the same host ports.
+
+### Sonar scans in CI (SonarCloud)
+
+If GitHub Actions reports **`must define … sonar.organization`** (often with project context **Unknown**):
+
+1. **SonarCloud** — Create a **[repository variable](https://docs.github.com/en/actions/learn-github-actions/variables)** named **`SONARCLOUD_ORGANIZATION`** whose value is your **SonarCloud organization key**, and ensure the **`SONAR_TOKEN`** secret is valid. **`sonar.projectKey`** lives in **`sonar-project.properties`** at the repo root.
+
+2. **Self-hosted SonarQube Server** — Set **`SONAR_HOST_URL`** and **`SONAR_TOKEN`** secrets. Leave **`SONARCLOUD_ORGANIZATION`** empty so the workflows do **not** pass `sonar.organization` (SonarCloud-only).
+
+3. The scan step forces **`projectBaseDir`** to **`${{ github.workspace }}`** so **`sonar-project.properties`** at the repo root loads even though backend/frontend steps use subdirectory working directories.
+
+4. Frontend-only PRs trigger only the Frontend workflow—but the checkout contains the whole repo so analysis still resolves root properties and both `sonar.sources` trees unless you tune them per scan.
