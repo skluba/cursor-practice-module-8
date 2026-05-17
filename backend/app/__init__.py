@@ -1,5 +1,6 @@
 """Flask application factory."""
 
+import click
 from flask import Flask
 from flask_cors import CORS
 
@@ -34,5 +35,13 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
         allow_headers=["Authorization", "Content-Type"],
         methods=["GET", "HEAD", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
     )
+
+    @app.cli.command("seed-catalog")
+    def seed_catalog_command() -> None:
+        """Upsert demo catalogue rows (SKU-stable). Run after `flask db upgrade`."""
+        from app.catalog_seed import upsert_demo_catalog
+
+        inserted, updated = upsert_demo_catalog()
+        click.echo(f"Catalog seed: {inserted} inserted, {updated} updated.")
 
     return app

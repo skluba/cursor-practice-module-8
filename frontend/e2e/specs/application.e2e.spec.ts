@@ -136,4 +136,52 @@ test.describe('Storefront application (mocked API)', () => {
 
     await expect(page.getByLabel(/^Street$/i)).toBeVisible()
   })
+
+  test('catalog ascending price floats the bargain SKU ahead of mugs', async ({ page }) => {
+    await attachShopApiMocks(page)
+    await page.goto('/catalog')
+
+    await page.getByLabel('Sort catalogue').selectOption('price_asc')
+    await expect(page.locator('ul').getByRole('heading').first()).toContainText(/Budget Desk Kit/i)
+    await expect(page.getByRole('heading', { name: /E2E Ceramic Mug/i })).toBeVisible()
+  })
+
+  test('catalog keyword filter trims description matches (coffee)', async ({ page }) => {
+    await attachShopApiMocks(page)
+    await page.goto('/catalog')
+    await page.getByLabel(/Filter by keywords/i).fill('coffee')
+    await page.getByRole('button', { name: /Apply filters/i }).click()
+
+    await expect(page.getByRole('heading', { name: /Aero Kettle Pro/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Zen Planter Shelf/i })).not.toBeVisible()
+  })
+
+  test('catalog title/SKU substring filter is case-insensitive', async ({ page }) => {
+    await attachShopApiMocks(page)
+    await page.goto('/catalog')
+    await page.getByLabel(/Filter by keywords/i).fill('ZEN')
+    await page.getByRole('button', { name: /Apply filters/i }).click()
+
+    await expect(page.getByRole('heading', { name: /Zen Planter Shelf/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /E2E Ceramic Mug/i })).not.toBeVisible()
+  })
+
+  test('catalog empty-state when nothing matches shoppers filter', async ({ page }) => {
+    await attachShopApiMocks(page)
+    await page.goto('/catalog')
+    await page.getByLabel(/Filter by keywords/i).fill('zzzzz-no-products')
+    await page.getByRole('button', { name: /Apply filters/i }).click()
+
+    await expect(page.getByText('No products available.')).toBeVisible()
+  })
+
+  test('catalog paging reaches second slice after Next page click', async ({ page }) => {
+    await attachShopApiMocks(page)
+    await page.goto('/catalog')
+
+    await expect(page.getByRole('heading', { name: /E2E Ceramic Mug/i })).toBeVisible()
+    await page.getByRole('button', { name: /Next page/i }).click()
+    await expect(page.getByRole('heading', { name: /Filler item 10/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Filler item 12/i })).toBeVisible()
+  })
 })

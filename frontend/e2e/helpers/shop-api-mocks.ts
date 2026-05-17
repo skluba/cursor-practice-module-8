@@ -30,6 +30,141 @@ const P2 = {
   active: true,
 } as const
 
+/** Extra rows split across pages (`page_size=9`) and exercised by filters/sorting. */
+const FILLER_START_ID = 3
+const MOCK_CATALOG: Array<typeof P1 | typeof P2 | (typeof P1 & { readonly id: number })> = [
+  P1,
+  P2,
+  ...Array.from({ length: 12 - FILLER_START_ID + 1 }, (_, j) => {
+    const id = FILLER_START_ID + j
+    return {
+      id,
+      sku: `E2E-X${id}`,
+      title: `Filler item ${id}`,
+      description: null,
+      price_cents: 500 + id * 50,
+      active: true,
+    } as const
+  }),
+]
+
+/** Distinct SKU for search filter tests (Zen + Aero). Inject into stable ids inside filler range. */
+const ZX = MOCK_CATALOG.find((x) => x.id === 5)!
+const ZEN_OVERRIDE = {
+  ...ZX,
+  sku: 'E2E-ZEN',
+  title: 'Zen Planter Shelf',
+  price_cents: 3299,
+} as const
+
+const WX = MOCK_CATALOG.find((x) => x.id === 6)!
+const LOW_OVERRIDE = {
+  ...WX,
+  sku: 'E2E-LOW',
+  title: 'Budget Desk Kit',
+  price_cents: 349,
+  description: 'Compact starter tray',
+} as const
+
+const VX = MOCK_CATALOG.find((x) => x.id === 7)!
+const AERO_OVERRIDE = {
+  ...VX,
+  sku: 'E2E-AERO',
+  title: 'Aero Kettle Pro',
+  price_cents: 4599,
+  description: 'Coffee lovers upgrade',
+} as const
+
+const MOCK_CATALOG_INDEXED = MOCK_CATALOG.map((row) =>
+  row.id === 5 ? ZEN_OVERRIDE : row.id === 6 ? LOW_OVERRIDE : row.id === 7 ? AERO_OVERRIDE : row,
+)
+
+function productById(pid: number) {
+  return MOCK_CATALOG_INDEXED.find((p) => p.id === pid) ?? null
+}
+
+const ALLOWED_SORT = new Set(['id', 'title_asc', 'title_desc', 'price_asc', 'price_desc'])
+
+function normalizeCatalogRows(
+  url: URL,
+): { body: Record<string, unknown>; status?: number } {
+  const sort = url.searchParams.get('sort') ?? 'id'
+  if (!ALLOWED_SORT.has(sort)) {
+    return { status: 422, body: { message: 'Invalid sort.', errors: { sort: ['Invalid choice.'] } } }
+  }
+
+  let rows = MOCK_CATALOG_INDEXED.map((r) => ({ ...r }))
+  const q = (url.searchParams.get('q') ?? '').trim().toLowerCase()
+  if (q.length) {
+    rows = rows.filter(
+      (r) =>
+        r.title.toLowerCase().includes(q) ||
+        r.sku.toLowerCase().includes(q) ||
+        (r.description ?? '').toLowerCase().includes(q),
+    )
+  }
+
+  const minPc = url.searchParams.get('min_price_cents')
+  const maxPc = url.searchParams.get('max_price_cents')
+  let loNum: number | null = null
+  let hiNum: number | null = null
+  if (minPc !== null && minPc !== '') {
+    loNum = Number(minPc)
+    if (Number.isNaN(loNum)) {
+      return { status: 422, body: { message: 'Bad min_price_cents.' } }
+    }
+  }
+  if (maxPc !== null && maxPc !== '') {
+    hiNum = Number(maxPc)
+    if (Number.isNaN(hiNum)) {
+      return { status: 422, body: { message: 'Bad max_price_cents.' } }
+    }
+  }
+  if (loNum !== null && hiNum !== null && loNum > hiNum) {
+    return {
+      status: 422,
+      body: { message: 'min_price_cents cannot exceed max_price_cents.' },
+    }
+  }
+  if (loNum !== null) {
+    rows = rows.filter((r) => r.price_cents >= loNum)
+  }
+  if (hiNum !== null) {
+    rows = rows.filter((r) => r.price_cents <= hiNum)
+  }
+
+  rows.sort((a, b) => {
+    switch (sort) {
+      case 'title_asc':
+        return a.title.localeCompare(b.title, 'en') || a.id - b.id
+      case 'title_desc':
+        return b.title.localeCompare(a.title, 'en') || b.id - a.id
+      case 'price_asc':
+        return a.price_cents - b.price_cents || a.id - b.id
+      case 'price_desc':
+        return b.price_cents - a.price_cents || b.id - a.id
+      default:
+        return a.id - b.id
+    }
+  })
+
+  const pageNumRaw = Number(url.searchParams.get('page') ?? '1')
+  const pageNum = Number.isFinite(pageNumRaw) && pageNumRaw >= 1 ? pageNumRaw : 1
+  const psRaw = Number(url.searchParams.get('page_size') ?? '20')
+  const pageSize =
+    Number.isFinite(psRaw) && psRaw >= 1 ? Math.min(100, Math.floor(psRaw)) : 20
+  const total = rows.length
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const slice = rows.slice((pageNum - 1) * pageSize, pageNum * pageSize)
+
+  return {
+    body: {
+      items: slice,
+      meta: { page: pageNum, page_size: pageSize, total, total_pages: totalPages },
+    },
+  }
+}
+
 export type MockOptions = {
   /** Force catalogue list GET to HTTP failure with JSON message */
   catalogListError?: boolean
@@ -51,10 +186,12 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
 
 /** Deterministic mocks for SPA `fetch`; other requests fall through. */
 export async function attachShopApiMocks(page: Page, opts: MockOptions = {}): Promise<void> {
+  type CatalogRow = (typeof MOCK_CATALOG_INDEXED)[number]
+
   type CartLineInner = {
     lineId: number
     qty: number
-    product: typeof P1 | typeof P2
+    product: CatalogRow
   }
 
   let nextLineId = 1
@@ -110,23 +247,15 @@ export async function attachShopApiMocks(page: Page, opts: MockOptions = {}): Pr
           await fulfillJson(route, { message: 'Upstream inventory offline.' }, 502)
           return
         }
-        const pageNum = Number(url.searchParams.get('page') ?? '1')
-        const items = pageNum >= 2 ? [P2] : [P1, P2]
-        await fulfillJson(route, {
-          items,
-          meta: {
-            page: pageNum,
-            page_size: 9,
-            total: items.length,
-            total_pages: Math.max(2, pageNum),
-          },
-        })
+        const payload = normalizeCatalogRows(url)
+        const st = payload.status ?? 200
+        await fulfillJson(route, payload.body, st)
         return
       }
 
       if (method === 'GET' && /^\/api\/v1\/catalog\/items\/\d+$/.test(path)) {
         const id = Number(path.split('/').pop())
-        const p = id === 1 ? P1 : id === 2 ? P2 : null
+        const p = productById(id)
         if (!p) {
           await fulfillJson(route, { message: 'Not found.' }, 404)
           return
@@ -198,7 +327,7 @@ export async function attachShopApiMocks(page: Page, opts: MockOptions = {}): Pr
         }
         const productId = Number(parsed.product_id)
         const qty = Number(parsed.quantity ?? 1)
-        const product = productId === 1 ? P1 : productId === 2 ? P2 : null
+        const product = productById(productId)
         if (!product) {
           await fulfillJson(route, { message: 'Unknown product.' }, 400)
           return

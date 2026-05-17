@@ -1,9 +1,40 @@
-from marshmallow import EXCLUDE, Schema, fields, validate
+from marshmallow import EXCLUDE, Schema, fields, validate, validates_schema
+from marshmallow.exceptions import ValidationError
 
 
-class PaginationQuerySchema(Schema):
+class CatalogListQuerySchema(Schema):
+    """Catalogue list: pagination + optional sort, text search, and price band (cents)."""
+
     page = fields.Integer(load_default=1, validate=validate.Range(min=1))
     page_size = fields.Integer(load_default=20, validate=validate.Range(min=1, max=100))
+    sort = fields.String(
+        load_default="id",
+        validate=validate.OneOf(["id", "title_asc", "title_desc", "price_asc", "price_desc"]),
+    )
+    q = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=200))
+    min_price_cents = fields.Integer(
+        load_default=None,
+        allow_none=True,
+        validate=validate.Range(min=0),
+    )
+    max_price_cents = fields.Integer(
+        load_default=None,
+        allow_none=True,
+        validate=validate.Range(min=0),
+    )
+
+    class Meta:
+        unknown = EXCLUDE
+
+    @validates_schema
+    def _price_band(self, data: dict, **kwargs) -> None:
+        lo = data.get("min_price_cents")
+        hi = data.get("max_price_cents")
+        if lo is not None and hi is not None and lo > hi:
+            raise ValidationError(
+                "min_price_cents cannot be greater than max_price_cents.",
+                field_name="min_price_cents",
+            )
 
 
 class PaginationMetaSchema(Schema):
