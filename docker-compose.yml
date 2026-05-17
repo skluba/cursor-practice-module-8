@@ -1,4 +1,4 @@
-# Local dependencies for development (PostgreSQL + Redis).
+# Local dependencies for development (PostgreSQL + Redis + optional SonarQube).
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,6 +10,12 @@ services:
       - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U app -d app']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -18,6 +24,27 @@ services:
     volumes:
       - redis_data:/data
 
+  sonarqube:
+    image: dhi.io/sonarqube:26-debian13-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '9001:9000'
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://postgres:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+      # Helps Sonar start inside Docker Desktop / constrained desktops (disable only for local dev).
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: 'true'
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+
 volumes:
   postgres_data:
   redis_data:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

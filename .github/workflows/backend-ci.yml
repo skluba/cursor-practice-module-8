@@ -58,7 +58,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements*.txt
+          cache-dependency-path: |
+            backend/requirements*.txt
+            backend/uv.lock
+            backend/pyproject.toml
 
       - name: Install dependencies
         run: |

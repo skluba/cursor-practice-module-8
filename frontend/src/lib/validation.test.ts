@@ -12,6 +12,7 @@ describe('validateEmail', () => {
     expect(validateEmail('not-an-email')).toMatch(/valid email/)
     expect(validateEmail('@nodomain')).toMatch(/valid email/)
     expect(validateEmail('a@')).toMatch(/valid email/)
+    expect(validateEmail('a@@bad.com')).toMatch(/valid email/)
   })
 
   it('accepts typical addresses after trim', () => {

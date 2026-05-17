@@ -18,6 +18,50 @@ docker compose up -d
 
 This exposes Postgres on host **5434** (mapped to container **5432**) and Redis on host **6381** (mapped to container **6379**), matching `backend/app/config.py` defaults and `DATABASE_URL` / `REDIS_URL` (`app` / `app` / database `app`).
 
+On **first** Postgres startup only, scripts under **`docker/postgres-init/`** run (including a **`sonar`** database for optional SonarQube).
+
+### SonarQube (optional code review UI)
+
+Compose includes **Docker Hardened Images** SonarQube **`dhi.io/sonarqube:26-debian13-dev`** on **`http://127.0.0.1:9000`** once Postgres is healthy.
+
+1. **Pull access** — Ensure your machine can pull `dhi.io/sonarqube:26-debian13-dev` (use `docker login dhi.io` if your organization requires registry authentication).
+
+2. **Resources** — SonarQube typically needs **about 2 GB RAM or more** for the JVM and embedded search; increase Docker Desktop memory if the container exits during startup.
+
+3. **Existing Postgres volume** — Init scripts run **only when the Postgres data volume is empty**. If you already had `postgres_data` before `docker/postgres-init/` existed, create the Sonar DB manually:
+
+   ```bash
+   docker compose exec postgres psql -U app -d app -v ON_ERROR_STOP=1 -c \
+     "CREATE USER sonar WITH PASSWORD 'sonar';" \
+     -c "CREATE DATABASE sonar OWNER sonar;"
+   ```
+
+4. **Start SonarQube** — Bring services up (Sonar waits on a healthy Postgres):
+
+   ```bash
+   docker compose up -d
+   ```
+
+   Or only infra + Sonar: `docker compose up -d postgres redis sonarqube`. Follow **`docker compose logs -f sonarqube`** until the server is ready (first boot can take several minutes).
+
+5. **Sign in** — Open **`http://127.0.0.1:9000`**. Defaults are **`admin` / `admin`**; you will be prompted to set a new password.
+
+6. **Analyze this repo** — Create a **project** in the UI, generate a **token**, then run **`sonar-scanner`** from the repo root (install it locally or use Sonar’s scanner image). Example:
+
+   ```bash
+   sonar-scanner \
+     -Dsonar.projectKey=shopmart-practice \
+     -Dsonar.sources=backend,frontend/src \
+     -Dsonar.host.url=http://127.0.0.1:9000 \
+     -Dsonar.token=<YOUR_GENERATED_TOKEN>
+   ```
+
+   Adjust **`sonar.sources`**, exclusions, **`sonar.python.version`**, and coverage report paths (`sonar.python.coverage.reportPaths`, `sonar.javascript.lcov.reportPaths`, etc.) to match how you run tests.
+
+7. **Linux hosts** — If Elasticsearch fails with **`vm.max_map_count`**, raise the sysctl limit per [SonarQube’s Docker installation notes](https://docs.sonarsource.com/sonarqube/latest/setup/install-server/installing-sonarqube-from-docker/). Docker Desktop on macOS/Windows often avoids this.
+
+`SONAR_ES_BOOTSTRAP_CHECKS_DISABLE` is enabled in Compose for **local developer convenience only**; do not treat it as a production hardening choice.
+
 ## 2. Backend API
 
 Open a terminal:
@@ -30,7 +74,11 @@ source .venv/bin/activate   # Windows PowerShell: .venv\Scripts\Activate.ps1
 
 pip install -r requirements.txt
 cp .env.example .env        # Edit SECRET_KEY, DATABASE_URL or REDIS_URL if needed.
+```
 
+**Locked dependencies** — `backend/uv.lock` pins the full transitive set (source of truth is `backend/pyproject.toml`). The `requirements*.txt` files are generated exports for `pip` (see their header comments): after changing dependencies, run **`uv lock`** then **`uv export ...`** again, or develop with **`uv sync --extra dev`** if you use `uv` locally.
+
+```bash
 export FLASK_APP=wsgi:app   # Windows CMD: set FLASK_APP=wsgi:app
 
 flask db upgrade
@@ -87,4 +135,4 @@ The SPA injects **`dns-prefetch` / `preconnect`** toward `VITE_API_BASE_URL` (se
 - **DB connection errors** — Ensure Postgres is up (`docker compose ps`). First run requires **`flask db upgrade`**.
 - **`401` after login / logout oddities** — Redis must be running (JWT blacklist). Use `docker compose` or a local Redis reachable at the URL in **`REDIS_URL`** (Compose default **`localhost:6381`**).
 - **Browser blocks API calls** — Match **`CORS_ORIGINS`** on the backend to how you opened the SPA (exact origin, including `localhost` vs `127.0.0.1`).
-- **Docker “port already allocated” / local collisions** — Edit the host (left) side in **`docker-compose.yml`** (`5434`, **`6381`**, etc.) so it’s free on your machine, then set **`DATABASE_URL`** and **`REDIS_URL`** in **`backend/.env`** to the same host ports.
+- **Docker “port already allocated” / local collisions** — Edit the host (left) side in **`docker-compose.yml`** (`5434`, **`6381`**, **`9000`** for SonarQube, etc.) so it’s free on your machine, then set **`DATABASE_URL`** and **`REDIS_URL`** in **`backend/.env`** to the same host ports.

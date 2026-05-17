@@ -9,6 +9,13 @@ from app.extensions import api, init_extensions
 
 
 def create_app(config_class: type[Config] | None = None) -> Flask:
+    """Build this JSON-first API application.
+
+    There is no Flask-WTF/session cookie auth model: callers send JWT bearer tokens explicitly.
+    Browsers therefore do not auto-attach bearer secrets like ambient cookies on forged POST
+    forms, and classic session CSRF is not applicable. CORS restricts which origins can read
+    responses while using credentialed browser traffic.
+    """
     app = Flask(__name__)
 
     cfg = config_class or Config

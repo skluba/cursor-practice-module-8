@@ -10,6 +10,7 @@ from flask_smorest import Blueprint
 from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import BadRequest, Conflict, Forbidden, Unauthorized
 
+from app.constants import UNAUTHORIZED_UNKNOWN_USER_DESCRIPTION
 from app.extensions import db
 from app.models.user import User
 from app.passwords import hash_password, verify_password
@@ -82,7 +83,7 @@ class RegisterProfile(MethodView):
     def post(self, payload: dict) -> dict:
         user = _load_user_from_identity()
         if user is None:
-            raise Unauthorized(description="Unknown user.")
+            raise Unauthorized(description=UNAUTHORIZED_UNKNOWN_USER_DESCRIPTION)
         if user.registration_complete:
             raise BadRequest(description="Registration is already finalized.")
 
@@ -103,7 +104,7 @@ class RegisterShipping(MethodView):
     def post(self, payload: dict) -> dict:
         user = _load_user_from_identity()
         if user is None:
-            raise Unauthorized(description="Unknown user.")
+            raise Unauthorized(description=UNAUTHORIZED_UNKNOWN_USER_DESCRIPTION)
         if user.registration_complete:
             raise BadRequest(description="Registration is already finalized.")
         if not user.first_name or not user.last_name:
@@ -128,7 +129,7 @@ class RegisterComplete(MethodView):
     def post(self) -> dict:
         user = _load_user_from_identity()
         if user is None:
-            raise Unauthorized(description="Unknown user.")
+            raise Unauthorized(description=UNAUTHORIZED_UNKNOWN_USER_DESCRIPTION)
         if user.registration_complete:
             raise BadRequest(description="Registration is already finalized.")
         if not user.first_name or not user.last_name or not user.phone:
@@ -183,5 +184,5 @@ class Me(MethodView):
     def get(self) -> dict:
         user = _load_user_from_identity()
         if user is None:
-            raise Unauthorized(description="Unknown user.")
+            raise Unauthorized(description=UNAUTHORIZED_UNKNOWN_USER_DESCRIPTION)
         return _user_public(user)

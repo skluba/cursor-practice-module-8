@@ -8,13 +8,44 @@ const REGISTER_PASSWORD_MAX = 256
 const EMAIL_MAX_CHARS = 320
 
 /** Require at least one dot in the host (matches typical production addresses). */
-const EMAIL_PATTERN = /^[^\s@]+@(?:[^\s@]+\.)+[^\s@]+$/
+
+function hasDangerousAsciiWhitespace(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    if (value.charCodeAt(i) <= 32) return true
+  }
+  return false
+}
+
+/**
+ * Linear-time, dot-in-host heuristic (similar to prior regex semantics).
+ * No nested quantifiers (avoids catastrophic backtracking on hostile input).
+ */
+function isReasonableAsciiEmail(value: string): boolean {
+  const atIdx = value.indexOf('@')
+  if (atIdx <= 0) return false
+  if (value.indexOf('@', atIdx + 1) !== -1) return false
+  const local = value.slice(0, atIdx)
+  const host = value.slice(atIdx + 1)
+  if (!local.length || !host.length) return false
+  if (!host.includes('.')) return false
+  if (host.startsWith('.') || host.endsWith('.') || host.includes('..')) return false
+  if (local.startsWith('.') || local.endsWith('.') || local.includes('..')) return false
+
+  const labels = host.split('.')
+  if (labels.length < 2) return false
+  for (const label of labels) {
+    if (!label.length) return false
+  }
+  return true
+}
 
 export function validateEmail(trimmedLowerOrRaw: string): string {
   const v = trimmedLowerOrRaw.trim()
   if (!v) return 'Enter your email address.'
   if (v.length > EMAIL_MAX_CHARS) return `Email must be ${EMAIL_MAX_CHARS} characters or fewer.`
-  if (!EMAIL_PATTERN.test(v)) return 'Enter a valid email address.'
+  if (hasDangerousAsciiWhitespace(v) || !isReasonableAsciiEmail(v)) {
+    return 'Enter a valid email address.'
+  }
   return ''
 }
 
