@@ -111,7 +111,7 @@ jobs:
           if-no-files-found: warn
 
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6.0.0
+        uses: SonarSource/sonarqube-scan-action@4bd40bf8411ed104853e94a3746ec92bc92845fde2b27dbf5c33fb5cfa8ecbe9 # v8.0.1
         with:
           # Always resolve properties from repo root (job default cwd is backend/)
           projectBaseDir: ${{ github.workspace }}
