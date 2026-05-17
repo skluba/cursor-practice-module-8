@@ -28,7 +28,7 @@ const ss = createDomStorage()
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: ls })
 Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: ss })
 
-if (typeof globalThis.window !== 'undefined') {
+if (globalThis.window !== undefined) {
   try {
     Object.defineProperty(globalThis.window, 'localStorage', { configurable: true, value: ls })
     Object.defineProperty(globalThis.window, 'sessionStorage', { configurable: true, value: ss })
