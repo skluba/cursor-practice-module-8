@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=9.0.3,<10",
+  "pytest-cov>=7,<8",
   "ruff>=0.15.13,<1",
   "fakeredis>=2,<3",
   "pip-audit>=2,<6",
@@ -37,6 +38,12 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "--cov=app --cov-branch --cov-report=xml:test-results/coverage.xml --cov-report=term-missing:skip-covered"
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+omit = ["tests/*", "**/migrations/*"]
 
 [tool.ruff]
 line-length = 100

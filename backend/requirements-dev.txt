@@ -23,6 +23,8 @@ colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   pytest
+coverage==7.14.0
+    # via pytest-cov
 cyclonedx-python-lib==11.7.0
     # via pip-audit
 defusedxml==0.7.1
@@ -103,7 +105,9 @@ pip-requirements-parser==32.0.1
 platformdirs==4.9.6
     # via pip-audit
 pluggy==1.6.0
-    # via pytest
+    # via
+    #   pytest
+    #   pytest-cov
 psycopg==3.3.4
     # via shopmart-backend
 psycopg-binary==3.3.4 ; implementation_name != 'pypy'
@@ -119,6 +123,10 @@ pyjwt==2.12.1
 pyparsing==3.3.2
     # via pip-requirements-parser
 pytest==9.0.3
+    # via
+    #   pytest-cov
+    #   shopmart-backend
+pytest-cov==7.1.0
     # via shopmart-backend
 python-dotenv==1.2.2
     # via shopmart-backend

@@ -52,7 +52,17 @@ jobs:
       - name: Unit tests
         run: |
           mkdir -p test-results
-          npm run test -- --run --reporter=github-actions --reporter=junit --outputFile.junit=test-results/vitest-junit.xml
+          npm run test -- --run --coverage --reporter=github-actions --reporter=junit --outputFile.junit=test-results/vitest-junit.xml
+
+      - name: Upload coverage report (LCOV / summary)
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-coverage-${{ github.run_number }}
+          path: |
+            frontend/test-results/coverage/lcov.info
+            frontend/test-results/coverage/coverage-summary.json
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Build (preview bundle for Playwright)
         run: npm run build

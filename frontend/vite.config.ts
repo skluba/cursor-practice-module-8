@@ -77,6 +77,17 @@ export default defineConfig(({ mode }) => {
       setupFiles: ['./src/test/polyfill-storage.ts', './src/test/setup.ts'],
       include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
       css: true,
+      coverage: {
+        provider: 'v8',
+        reportsDirectory: './test-results/coverage',
+        reporter: ['text', 'lcov', 'json-summary'],
+        include: ['src/**/*.{ts,tsx}'],
+        exclude: [
+          '**/*.test.{ts,tsx}',
+          '**/src/test/**',
+          '**/e2e/**',
+        ],
+      },
     },
   }
 })
