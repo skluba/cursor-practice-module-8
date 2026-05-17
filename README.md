@@ -2,6 +2,8 @@
 
 Flask REST API (`backend`) and React + Vite frontend (`frontend`). Run them locally in two terminals (plus Docker for Postgres + Redis).
 
+[Demo video](https://drive.google.com/file/d/1JaNN3wcLl7IhZswrBzRwzTzENNoKePng/view?usp=drive_link)
+
 **Project narrative** — See **[docs/PROJECT_JOURNEY.md](./docs/PROJECT_JOURNEY.md)** for how this stack was assembled (prompt themes for frontend/backend/CI), the SonarQube cleanup (~80+ issues addressed or flagged false positive), and Lighthouse-oriented performance work (auditing production preview vs dev server).
 
 ## Prerequisites
