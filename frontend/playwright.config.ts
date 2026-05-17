@@ -8,24 +8,38 @@ const baseURL =
   process.env.PLAYWRIGHT_BASE_URL ??
   (process.env.CI ? `http://${host}:${previewPort}` : `http://${host}:${devPort}`)
 
-const webServer =
-  process.env.PLAYWRIGHT_SKIP_WEBSERVER || process.env.PLAYWRIGHT_BASE_URL
-    ? undefined
-    : process.env.CI
-      ? {
-          command: `npm run preview -- --host ${host} --port ${previewPort} --strictPort`,
-          url: `http://${host}:${previewPort}`,
-          reuseExistingServer: false,
-          stdout: 'pipe',
-          stderr: 'pipe',
-          timeout: 120_000,
-        }
-      : {
-          command: `npm run dev -- --host ${host} --port ${devPort} --strictPort`,
-          url: `http://${host}:${devPort}`,
-          reuseExistingServer: true,
-          timeout: 120_000,
-        }
+function resolveWebServer():
+  | {
+      command: string
+      url: string
+      reuseExistingServer: boolean
+      stdout?: 'pipe'
+      stderr?: 'pipe'
+      timeout: number
+    }
+  | undefined {
+  if (process.env.PLAYWRIGHT_SKIP_WEBSERVER || process.env.PLAYWRIGHT_BASE_URL) {
+    return undefined
+  }
+  if (process.env.CI) {
+    return {
+      command: `npm run preview -- --host ${host} --port ${previewPort} --strictPort`,
+      url: `http://${host}:${previewPort}`,
+      reuseExistingServer: false,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: 120_000,
+    }
+  }
+  return {
+    command: `npm run dev -- --host ${host} --port ${devPort} --strictPort`,
+    url: `http://${host}:${devPort}`,
+    reuseExistingServer: true,
+    timeout: 120_000,
+  }
+}
+
+const webServer = resolveWebServer()
 
 export default defineConfig({
   testDir: './e2e/specs',

@@ -2,6 +2,15 @@ import type { Page, Route } from '@playwright/test'
 
 export const LOGIN_TOKEN = 'e2e-access-token'
 
+function bearer(req: Route): string {
+  const h = req.request().headers()['authorization'] ?? ''
+  return h.replace(/^Bearer\s+/i, '').trim()
+}
+
+function authed(tok: string): boolean {
+  return tok === LOGIN_TOKEN
+}
+
 const SAMPLE_USER_ME = {
   id: 1,
   email: 'shopper@test.dev',
@@ -111,7 +120,9 @@ function readSort(params: URLSearchParams): JsonErrorEnvelope | { sort: string }
   return { sort }
 }
 
-function readPriceBand(params: URLSearchParams): JsonErrorEnvelope | { lo: number | null; hi: number | null } {
+function readPriceBand(
+  params: URLSearchParams,
+): JsonErrorEnvelope | { lo: number | null; hi: number | null } {
   const minPc = params.get('min_price_cents')
   const maxPc = params.get('max_price_cents')
   let lo: number | null = null
@@ -193,9 +204,7 @@ function isJsonError(value: JsonErrorEnvelope | object): value is JsonErrorEnvel
   return 'status' in value && typeof (value as JsonErrorEnvelope).status === 'number'
 }
 
-function normalizeCatalogRows(
-  url: URL,
-): { body: Record<string, unknown>; status?: number } {
+function normalizeCatalogRows(url: URL): { body: Record<string, unknown>; status?: number } {
   const sortResult = readSort(url.searchParams)
   if (isJsonError(sortResult)) return sortResult
 
@@ -226,215 +235,254 @@ export type MockOptions = {
 }
 
 async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
+  const jsonHeaders =
+    status === 204 ? undefined : { 'Content-Type': 'application/json' }
   await route.fulfill({
     status,
     contentType: 'application/json',
     body: body === undefined ? '' : JSON.stringify(body),
-    headers:
-      status === 204
-        ? undefined
-        : {
-            'Content-Type': 'application/json',
-          },
+    headers: jsonHeaders,
   })
+}
+
+type CatalogRow = (typeof MOCK_CATALOG_INDEXED)[number]
+
+type CartLineInner = {
+  lineId: number
+  qty: number
+  product: CatalogRow
+}
+
+type CartState = {
+  nextLineId: number
+  lines: CartLineInner[]
+}
+
+type MockRouteContext = {
+  route: Route
+  req: ReturnType<Route['request']>
+  url: URL
+  path: string
+  method: string
+}
+
+function buildCartPayload(lines: CartLineInner[]) {
+  const payloadLines = lines.map((ln) => ({
+    id: ln.lineId,
+    quantity: ln.qty,
+    product: {
+      id: ln.product.id,
+      sku: ln.product.sku,
+      title: ln.product.title,
+      price_cents: ln.product.price_cents,
+    },
+  }))
+  const quantity_total = lines.reduce((sum, ln) => sum + ln.qty, 0)
+  const estimated_total_cents = lines.reduce(
+    (sum, ln) => sum + ln.product.price_cents * ln.qty,
+    0,
+  )
+  return {
+    lines: payloadLines,
+    line_count: payloadLines.length,
+    quantity_total,
+    estimated_total_cents,
+  }
+}
+
+async function handleCatalogItemsList(
+  ctx: MockRouteContext,
+  opts: MockOptions,
+): Promise<boolean> {
+  if (ctx.method !== 'GET' || ctx.path !== '/api/v1/catalog/items') return false
+  if (opts.catalogListError) {
+    await fulfillJson(ctx.route, { message: 'Upstream inventory offline.' }, 502)
+    return true
+  }
+  const payload = normalizeCatalogRows(ctx.url)
+  const st = payload.status ?? 200
+  await fulfillJson(ctx.route, payload.body, st)
+  return true
+}
+
+async function handleCatalogItemDetail(ctx: MockRouteContext): Promise<boolean> {
+  if (ctx.method !== 'GET' || !/^\/api\/v1\/catalog\/items\/\d+$/.test(ctx.path)) return false
+  const id = Number(ctx.path.split('/').pop())
+  const p = productById(id)
+  if (!p) {
+    await fulfillJson(ctx.route, { message: 'Not found.' }, 404)
+    return true
+  }
+  await fulfillJson(ctx.route, p)
+  return true
+}
+
+async function handleAuthLogin(ctx: MockRouteContext): Promise<boolean> {
+  if (ctx.method !== 'POST' || ctx.path !== '/api/v1/auth/login') return false
+  const raw = ctx.req.postData() ?? ''
+  if (raw.includes('fail@')) {
+    await fulfillJson(ctx.route, { message: 'Invalid credentials.' }, 401)
+    return true
+  }
+  await fulfillJson(ctx.route, { access_token: LOGIN_TOKEN })
+  return true
+}
+
+async function handleRegisterStart(ctx: MockRouteContext): Promise<boolean> {
+  if (ctx.method !== 'POST' || ctx.path !== '/api/v1/auth/register/start') return false
+  await fulfillJson(ctx.route, { access_token: 'wiz-start' })
+  return true
+}
+
+async function handleRegisterProfile(ctx: MockRouteContext): Promise<boolean> {
+  if (ctx.method !== 'POST' || !ctx.path.endsWith('/auth/register/profile')) return false
+  await fulfillJson(ctx.route, SAMPLE_USER_ME)
+  return true
+}
+
+async function handleRegisterShipping(ctx: MockRouteContext): Promise<boolean> {
+  if (ctx.method !== 'POST' || !ctx.path.endsWith('/auth/register/shipping')) return false
+  await fulfillJson(ctx.route, SAMPLE_USER_ME)
+  return true
+}
+
+async function handleRegisterComplete(ctx: MockRouteContext): Promise<boolean> {
+  if (ctx.method !== 'POST' || !ctx.path.endsWith('/auth/register/complete')) return false
+  await fulfillJson(ctx.route, { access_token: LOGIN_TOKEN })
+  return true
+}
+
+async function handleAuthMe(ctx: MockRouteContext): Promise<boolean> {
+  if (ctx.method !== 'GET' || ctx.path !== '/api/v1/auth/me') return false
+  if (!authed(bearer(ctx.route))) {
+    await fulfillJson(ctx.route, { message: 'Unauthorized.' }, 401)
+    return true
+  }
+  await fulfillJson(ctx.route, SAMPLE_USER_ME)
+  return true
+}
+
+async function handleAuthLogout(ctx: MockRouteContext): Promise<boolean> {
+  if (ctx.method !== 'POST' || ctx.path !== '/api/v1/auth/logout') return false
+  await ctx.route.fulfill({ status: 204 })
+  return true
+}
+
+async function handleCartGet(ctx: MockRouteContext, cart: CartState): Promise<boolean> {
+  if (ctx.method !== 'GET' || ctx.path !== '/api/v1/cart') return false
+  if (!authed(bearer(ctx.route))) {
+    await fulfillJson(ctx.route, { message: 'Sign in.' }, 401)
+    return true
+  }
+  await fulfillJson(ctx.route, buildCartPayload(cart.lines))
+  return true
+}
+
+async function handleCartItemsPost(ctx: MockRouteContext, cart: CartState): Promise<boolean> {
+  if (ctx.method !== 'POST' || ctx.path !== '/api/v1/cart/items') return false
+  if (!authed(bearer(ctx.route))) {
+    await fulfillJson(ctx.route, { message: 'Sign in.' }, 401)
+    return true
+  }
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(ctx.req.postData() ?? '{}') as Record<string, unknown>
+  } catch {
+    parsed = {}
+  }
+  const productId = Number(parsed.product_id)
+  const qty = Number(parsed.quantity ?? 1)
+  const product = productById(productId)
+  if (!product) {
+    await fulfillJson(ctx.route, { message: 'Unknown product.' }, 400)
+    return true
+  }
+  let row = cart.lines.find((l) => l.product.id === productId)
+  if (row) {
+    row.qty += qty
+  } else {
+    row = { lineId: cart.nextLineId++, qty, product }
+    cart.lines.push(row)
+  }
+  await fulfillJson(ctx.route, buildCartPayload(cart.lines))
+  return true
+}
+
+async function handleCartLineDelete(ctx: MockRouteContext, cart: CartState): Promise<boolean> {
+  if (ctx.method !== 'DELETE' || !/^\/api\/v1\/cart\/items\/\d+$/.test(ctx.path)) return false
+  const lineId = Number(ctx.path.split('/').pop())
+  cart.lines = cart.lines.filter((l) => l.lineId !== lineId)
+  await ctx.route.fulfill({ status: 204 })
+  return true
+}
+
+async function handleCheckout(ctx: MockRouteContext, cart: CartState): Promise<boolean> {
+  if (ctx.method !== 'POST' || ctx.path !== '/api/v1/orders/checkout') return false
+  if (!authed(bearer(ctx.route))) {
+    await fulfillJson(ctx.route, { message: 'Sign in.' }, 401)
+    return true
+  }
+  const snap = buildCartPayload(cart.lines)
+  if (!snap.quantity_total) {
+    await fulfillJson(ctx.route, { message: 'Cart empty.' }, 400)
+    return true
+  }
+  const outLines = snap.lines.map((ln) => ({
+    product_id: ln.product.id,
+    sku: ln.product.sku,
+    title: ln.product.title,
+    quantity: ln.quantity,
+    unit_price_cents: ln.product.price_cents,
+    line_total_cents: ln.product.price_cents * ln.quantity,
+  }))
+  cart.lines.length = 0
+  await fulfillJson(ctx.route, {
+    id: 999,
+    total_cents: snap.estimated_total_cents,
+    status: 'PLACED',
+    lines: outLines,
+  })
+  return true
+}
+
+async function dispatchMockRoute(ctx: MockRouteContext, opts: MockOptions, cart: CartState) {
+  const chain: Array<(c: MockRouteContext, o: MockOptions, s: CartState) => Promise<boolean>> = [
+    (c, o) => handleCatalogItemsList(c, o),
+    (c) => handleCatalogItemDetail(c),
+    (c) => handleAuthLogin(c),
+    (c) => handleRegisterStart(c),
+    (c) => handleRegisterProfile(c),
+    (c) => handleRegisterShipping(c),
+    (c) => handleRegisterComplete(c),
+    (c) => handleAuthMe(c),
+    (c) => handleAuthLogout(c),
+    (c, _o, s) => handleCartGet(c, s),
+    (c, _o, s) => handleCartItemsPost(c, s),
+    (c, _o, s) => handleCartLineDelete(c, s),
+    (c, _o, s) => handleCheckout(c, s),
+  ]
+  for (const step of chain) {
+    if (await step(ctx, opts, cart)) return
+  }
+  await ctx.route.continue()
 }
 
 /** Deterministic mocks for SPA `fetch`; other requests fall through. */
 export async function attachShopApiMocks(page: Page, opts: MockOptions = {}): Promise<void> {
-  type CatalogRow = (typeof MOCK_CATALOG_INDEXED)[number]
-
-  type CartLineInner = {
-    lineId: number
-    qty: number
-    product: CatalogRow
-  }
-
-  let nextLineId = 1
-  let cartLines: CartLineInner[] = []
-
-  function bearer(req: Route): string {
-    const h = req.request().headers()['authorization'] ?? ''
-    return h.replace(/^Bearer\s+/i, '').trim()
-  }
-
-  function authed(tok: string): boolean {
-    return tok === LOGIN_TOKEN
-  }
-
-  function cartPayload(): {
-    lines: Array<{ id: number; quantity: number; product: { id: number; sku: string; title: string; price_cents: number } }>
-    line_count: number
-    quantity_total: number
-    estimated_total_cents: number
-  } {
-    const lines = cartLines.map((ln) => ({
-      id: ln.lineId,
-      quantity: ln.qty,
-      product: {
-        id: ln.product.id,
-        sku: ln.product.sku,
-        title: ln.product.title,
-        price_cents: ln.product.price_cents,
-      },
-    }))
-    const quantity_total = cartLines.reduce((sum, ln) => sum + ln.qty, 0)
-    const estimated_total_cents = cartLines.reduce(
-      (sum, ln) => sum + ln.product.price_cents * ln.qty,
-      0,
-    )
-    return {
-      lines,
-      line_count: lines.length,
-      quantity_total,
-      estimated_total_cents,
-    }
-  }
+  const cart: CartState = { nextLineId: 1, lines: [] }
 
   await page.route('**/api/v1/**', async (route) => {
     const req = route.request()
     const url = new URL(req.url())
-    const path = url.pathname.replace(/\/$/, '')
-    const method = req.method()
-
+    const ctx: MockRouteContext = {
+      route,
+      req,
+      url,
+      path: url.pathname.replace(/\/$/, ''),
+      method: req.method(),
+    }
     try {
-      if (method === 'GET' && path === '/api/v1/catalog/items') {
-        if (opts.catalogListError) {
-          await fulfillJson(route, { message: 'Upstream inventory offline.' }, 502)
-          return
-        }
-        const payload = normalizeCatalogRows(url)
-        const st = payload.status ?? 200
-        await fulfillJson(route, payload.body, st)
-        return
-      }
-
-      if (method === 'GET' && /^\/api\/v1\/catalog\/items\/\d+$/.test(path)) {
-        const id = Number(path.split('/').pop())
-        const p = productById(id)
-        if (!p) {
-          await fulfillJson(route, { message: 'Not found.' }, 404)
-          return
-        }
-        await fulfillJson(route, p)
-        return
-      }
-
-      if (method === 'POST' && path === '/api/v1/auth/login') {
-        const raw = req.postData() ?? ''
-        if (raw.includes('fail@')) {
-          await fulfillJson(route, { message: 'Invalid credentials.' }, 401)
-          return
-        }
-        await fulfillJson(route, { access_token: LOGIN_TOKEN })
-        return
-      }
-
-      if (method === 'POST' && path === '/api/v1/auth/register/start') {
-        await fulfillJson(route, { access_token: 'wiz-start' })
-        return
-      }
-      if (method === 'POST' && path.endsWith('/auth/register/profile')) {
-        await fulfillJson(route, SAMPLE_USER_ME)
-        return
-      }
-      if (method === 'POST' && path.endsWith('/auth/register/shipping')) {
-        await fulfillJson(route, SAMPLE_USER_ME)
-        return
-      }
-      if (method === 'POST' && path.endsWith('/auth/register/complete')) {
-        await fulfillJson(route, { access_token: LOGIN_TOKEN })
-        return
-      }
-
-      if (method === 'GET' && path === '/api/v1/auth/me') {
-        if (!authed(bearer(route))) {
-          await fulfillJson(route, { message: 'Unauthorized.' }, 401)
-          return
-        }
-        await fulfillJson(route, SAMPLE_USER_ME)
-        return
-      }
-
-      if (method === 'POST' && path === '/api/v1/auth/logout') {
-        await route.fulfill({ status: 204 })
-        return
-      }
-
-      if (method === 'GET' && path === '/api/v1/cart') {
-        if (!authed(bearer(route))) {
-          await fulfillJson(route, { message: 'Sign in.' }, 401)
-          return
-        }
-        await fulfillJson(route, cartPayload())
-        return
-      }
-
-      if (method === 'POST' && path === '/api/v1/cart/items') {
-        if (!authed(bearer(route))) {
-          await fulfillJson(route, { message: 'Sign in.' }, 401)
-          return
-        }
-        let parsed: Record<string, unknown>
-        try {
-          parsed = JSON.parse(req.postData() ?? '{}') as Record<string, unknown>
-        } catch {
-          parsed = {}
-        }
-        const productId = Number(parsed.product_id)
-        const qty = Number(parsed.quantity ?? 1)
-        const product = productById(productId)
-        if (!product) {
-          await fulfillJson(route, { message: 'Unknown product.' }, 400)
-          return
-        }
-        let row = cartLines.find((l) => l.product.id === productId)
-        if (row) {
-          row.qty += qty
-        } else {
-          row = { lineId: nextLineId++, qty, product }
-          cartLines.push(row)
-        }
-        await fulfillJson(route, cartPayload())
-        return
-      }
-
-      if (method === 'DELETE' && /^\/api\/v1\/cart\/items\/\d+$/.test(path)) {
-        const lineId = Number(path.split('/').pop())
-        cartLines = cartLines.filter((l) => l.lineId !== lineId)
-        await route.fulfill({ status: 204 })
-        return
-      }
-
-      if (method === 'POST' && path === '/api/v1/orders/checkout') {
-        if (!authed(bearer(route))) {
-          await fulfillJson(route, { message: 'Sign in.' }, 401)
-          return
-        }
-        const snap = cartPayload()
-        if (!snap.quantity_total) {
-          await fulfillJson(route, { message: 'Cart empty.' }, 400)
-          return
-        }
-        const outLines = snap.lines.map((ln) => ({
-          product_id: ln.product.id,
-          sku: ln.product.sku,
-          title: ln.product.title,
-          quantity: ln.quantity,
-          unit_price_cents: ln.product.price_cents,
-          line_total_cents: ln.product.price_cents * ln.quantity,
-        }))
-        const total = snap.estimated_total_cents
-        cartLines = []
-        await fulfillJson(route, {
-          id: 999,
-          total_cents: total,
-          status: 'PLACED',
-          lines: outLines,
-        })
-        return
-      }
-
-      await route.continue()
+      await dispatchMockRoute(ctx, opts, cart)
     } catch {
       await route.continue()
     }

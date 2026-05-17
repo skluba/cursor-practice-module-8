@@ -8,11 +8,17 @@ import { AuthProvider } from '../context/AuthContext'
 import { CartProvider } from '../context/CartContext'
 
 beforeAll(() => {
-  if (typeof globalThis.ResizeObserver === 'undefined') {
+  if (globalThis.ResizeObserver === undefined) {
     globalThis.ResizeObserver = class {
-      observe(): void {}
-      unobserve(): void {}
-      disconnect(): void {}
+      observe(): void {
+        void 0
+      }
+      unobserve(): void {
+        void 0
+      }
+      disconnect(): void {
+        void 0
+      }
     }
   }
 })
