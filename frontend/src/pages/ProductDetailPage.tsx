@@ -66,6 +66,13 @@ export function ProductDetailPage() {
     )
   }
 
+  let addButtonLabel = 'Sign in to add'
+  if (busy) {
+    addButtonLabel = 'Adding…'
+  } else if (token) {
+    addButtonLabel = 'Add to cart'
+  }
+
   return (
     <article className="mx-auto max-w-lg space-y-6">
       <Link to="/catalog" className="text-sm font-medium text-indigo-600 hover:underline">
@@ -101,7 +108,7 @@ export function ProductDetailPage() {
           disabled={busy}
           className="w-full rounded-lg bg-indigo-600 py-3 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
         >
-          {busy ? 'Adding…' : token ? 'Add to cart' : 'Sign in to add'}
+          {addButtonLabel}
         </button>
       </form>
     </article>

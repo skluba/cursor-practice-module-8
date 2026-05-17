@@ -20,7 +20,7 @@ const navClass = ({ isActive }: { isActive: boolean }) =>
 const navClassMobile =
   'block rounded-lg px-3 py-3 text-base font-medium text-slate-800 hover:bg-slate-100 aria-[current=page]:bg-indigo-100 aria-[current=page]:text-indigo-800'
 
-function BadgePill({ value }: { value: number }) {
+function BadgePill({ value }: Readonly<{ value: number }>) {
   return (
     <span className="ml-1 inline-flex min-w-5 justify-center rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
       {value}
@@ -87,7 +87,7 @@ function DesktopAccountCluster({
   )
 }
 
-function BurgerGlyphs({ menuOpen }: { menuOpen: boolean }) {
+function BurgerGlyphs({ menuOpen }: Readonly<{ menuOpen: boolean }>) {
   if (menuOpen) {
     return (
       <span className="text-xl leading-none" aria-hidden>

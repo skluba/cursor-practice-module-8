@@ -90,6 +90,70 @@ export function CataloguePage() {
     setPage(1)
   }
 
+  function catalogBody() {
+    if (loading) {
+      return (
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          aria-label="Loading catalogue products."
+          className="space-y-4"
+        >
+          <span className="sr-only">Loading catalogue products.</span>
+          <CatalogueGridSkeleton />
+          <p className="text-center text-xs text-slate-500">Synchronizing inventory…</p>
+        </div>
+      )
+    }
+    if (error) {
+      return (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          {error}
+        </div>
+      )
+    }
+    if (items.length === 0) {
+      return <p className="text-slate-600">No products available.</p>
+    }
+    return (
+      <>
+        <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((p) => (
+            <li
+              key={p.id}
+              className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-200 hover:shadow-md"
+            >
+              <div className="flex flex-1 flex-col">
+                <h2 className="text-lg font-semibold text-slate-900">{p.title}</h2>
+                <p className="mt-1 line-clamp-2 text-xs text-slate-500">{p.description ?? ''}</p>
+                <div className="mt-4 flex flex-1 flex-col gap-4">
+                  <p className="text-xl font-semibold tabular-nums text-indigo-700">
+                    {formatUsd(p.price_cents)}
+                  </p>
+                  <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                    SKU · {p.sku}
+                  </p>
+                  <Link
+                    to={`/catalog/${p.id}`}
+                    className="inline-flex w-full justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+                  >
+                    View & add to cart
+                  </Link>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {meta ? (
+          <p className="text-center text-xs text-slate-500">
+            Page {meta.page} of {meta.total_pages} ({meta.total} products)
+          </p>
+        ) : null}
+      </>
+    )
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -169,60 +233,7 @@ export function CataloguePage() {
         </p>
       ) : null}
 
-      {loading ? (
-        <div
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-          aria-label="Loading catalogue products."
-          className="space-y-4"
-        >
-          <span className="sr-only">Loading catalogue products.</span>
-          <CatalogueGridSkeleton />
-          <p className="text-center text-xs text-slate-500">Synchronizing inventory…</p>
-        </div>
-      ) : error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-          {error}
-        </div>
-      ) : items.length === 0 ? (
-        <p className="text-slate-600">No products available.</p>
-      ) : (
-        <>
-          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {items.map((p) => (
-              <li
-                key={p.id}
-                className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-200 hover:shadow-md"
-              >
-                <div className="flex flex-1 flex-col">
-                  <h2 className="text-lg font-semibold text-slate-900">{p.title}</h2>
-                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">{p.description ?? ''}</p>
-                  <div className="mt-4 flex flex-1 flex-col gap-4">
-                    <p className="text-xl font-semibold tabular-nums text-indigo-700">
-                      {formatUsd(p.price_cents)}
-                    </p>
-                    <p className="text-[11px] uppercase tracking-wide text-slate-400">
-                      SKU · {p.sku}
-                    </p>
-                    <Link
-                      to={`/catalog/${p.id}`}
-                      className="inline-flex w-full justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-                    >
-                      View & add to cart
-                    </Link>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {meta ? (
-            <p className="text-center text-xs text-slate-500">
-              Page {meta.page} of {meta.total_pages} ({meta.total} products)
-            </p>
-          ) : null}
-        </>
-      )}
+      {catalogBody()}
       {!error && (
         <div className={`flex items-center justify-center gap-4 ${loading ? 'opacity-60' : ''}`}>
           <button

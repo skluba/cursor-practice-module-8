@@ -20,7 +20,7 @@ function createDomStorage(): Storage {
     setItem(key: string, value: string): void {
       data.set(String(key), String(value))
     },
-  } as Storage
+  }
 }
 
 const ls = createDomStorage()
@@ -28,10 +28,10 @@ const ss = createDomStorage()
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: ls })
 Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: ss })
 
-if (typeof window !== 'undefined') {
+if (typeof globalThis.window !== 'undefined') {
   try {
-    Object.defineProperty(window, 'localStorage', { configurable: true, value: ls })
-    Object.defineProperty(window, 'sessionStorage', { configurable: true, value: ss })
+    Object.defineProperty(globalThis.window, 'localStorage', { configurable: true, value: ls })
+    Object.defineProperty(globalThis.window, 'sessionStorage', { configurable: true, value: ss })
   } catch {
     /* non-configurable accessors */
   }

@@ -201,7 +201,8 @@ function readPagination(params: URLSearchParams): { pageNum: number; pageSize: n
 }
 
 function isJsonError(value: JsonErrorEnvelope | object): value is JsonErrorEnvelope {
-  return 'status' in value && typeof (value as JsonErrorEnvelope).status === 'number'
+  if (typeof value !== 'object' || value === null) return false
+  return 'status' in value && typeof Reflect.get(value, 'status') === 'number'
 }
 
 function normalizeCatalogRows(url: URL): { body: Record<string, unknown>; status?: number } {

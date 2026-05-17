@@ -10,8 +10,10 @@ const EMAIL_MAX_CHARS = 320
 /** Require at least one dot in the host (matches typical production addresses). */
 
 function hasDangerousAsciiWhitespace(value: string): boolean {
-  for (let i = 0; i < value.length; i++) {
-    if (value.charCodeAt(i) <= 32) return true
+  for (let i = 0; i < value.length; ) {
+    const cp = value.codePointAt(i) ?? 0
+    if (cp <= 32) return true
+    i += cp > 0xffff ? 2 : 1
   }
   return false
 }
@@ -23,7 +25,7 @@ function hasDangerousAsciiWhitespace(value: string): boolean {
 function isReasonableAsciiEmail(value: string): boolean {
   const atIdx = value.indexOf('@')
   if (atIdx <= 0) return false
-  if (value.indexOf('@', atIdx + 1) !== -1) return false
+  if (value.includes('@', atIdx + 1)) return false
   const local = value.slice(0, atIdx)
   const host = value.slice(atIdx + 1)
   if (!local.length || !host.length) return false
