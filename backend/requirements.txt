@@ -61,7 +61,7 @@ psycopg==3.3.4
     # via shopmart-backend
 psycopg-binary==3.3.4 ; implementation_name != 'pypy'
     # via psycopg
-pyjwt==2.12.1
+pyjwt==2.13.0
     # via flask-jwt-extended
 python-dotenv==1.2.2
     # via shopmart-backend
