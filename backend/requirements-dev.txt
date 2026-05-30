@@ -29,7 +29,7 @@ cyclonedx-python-lib==11.7.0
     # via pip-audit
 defusedxml==0.7.1
     # via py-serializable
-fakeredis==2.35.1
+fakeredis==2.36.0
     # via shopmart-backend
 filelock==3.29.0
     # via cachecontrol
