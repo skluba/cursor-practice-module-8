@@ -65,7 +65,7 @@ pyjwt==2.12.1
     # via flask-jwt-extended
 python-dotenv==1.2.2
     # via shopmart-backend
-redis==7.4.0
+redis==8.0.0
     # via shopmart-backend
 sqlalchemy==2.0.49
     # via

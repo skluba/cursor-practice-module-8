@@ -130,7 +130,7 @@ pytest-cov==7.1.0
     # via shopmart-backend
 python-dotenv==1.2.2
     # via shopmart-backend
-redis==7.4.0
+redis==8.0.0
     # via
     #   fakeredis
     #   shopmart-backend
