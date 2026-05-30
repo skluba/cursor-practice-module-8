@@ -102,7 +102,7 @@ pip-audit==2.10.0
     # via shopmart-backend
 pip-requirements-parser==32.0.1
     # via pip-audit
-platformdirs==4.9.6
+platformdirs==4.10.0
     # via pip-audit
 pluggy==1.6.0
     # via
